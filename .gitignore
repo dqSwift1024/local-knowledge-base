@@ -1,0 +1,4 @@
+.env
+kb_data/
+__pycache__/
+*.pyc

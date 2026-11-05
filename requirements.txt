@@ -1,0 +1,21 @@
+# 必需
+numpy>=1.26
+
+# Web 管理界面（python -m kb serve）
+fastapi
+uvicorn
+python-multipart
+
+# 可选解析依赖（按需安装；缺失时对应格式会给出明确提示，不影响其它格式）
+# pymupdf        # PDF 文字与扫描页渲染
+# python-docx    # Word (.docx)
+# openpyxl       # Excel (.xlsx)
+# python-pptx    # PowerPoint (.pptx)
+# pillow         # 图片解码（OCR 前置）
+# pytesseract    # 图片/扫描 PDF 的 OCR，需另装系统 tesseract：brew install tesseract tesseract-lang
+
+# 规模化（下一阶段，按需启用）
+# psycopg[binary]        # KB_STORE=postgres：PostgreSQL 驱动
+# pgvector               # KB_STORE=postgres：向量扩展绑定
+# sentence-transformers  # KB_EMBEDDER=bge：本地 bge-m3 嵌入
+# FlagEmbedding          # KB_RERANKER=bge：本地 bge-reranker 重排
