@@ -23,7 +23,7 @@ SYSTEM_PROMPT = """你是知识库问答助手。只能依据下面提供的资�
 
 
 class AnswerGenerator(Protocol):
-    def generate(self, question: str, contexts: list[Retrieved]) -> dict: ...
+    def generate(self, question: str, contexts: list[Retrieved], history: list[dict] | None = None) -> dict: ...
 
 
 class OfflineExtractive:
@@ -32,7 +32,7 @@ class OfflineExtractive:
     def __init__(self, max_snippets: int = 3) -> None:
         self._max = max_snippets
 
-    def generate(self, question: str, contexts: list[Retrieved]) -> dict:
+    def generate(self, question: str, contexts: list[Retrieved], history: list[dict] | None = None) -> dict:
         if not contexts:
             return {"answer": "", "citations": [], "refused": True}
         chosen = contexts[: self._max]
@@ -49,15 +49,32 @@ class OfflineExtractive:
 class CloudAnswerGenerator:
     """调用兼容接口，要求模型只输出带引用的 JSON；上下文用父块文本。"""
 
-    def __init__(self, settings: Settings) -> None:
-        if not settings.api_key:
+    def __init__(
+        self,
+        settings: Settings,
+        *,
+        name: str = "primary",
+        base_url: str | None = None,
+        api_key: str | None = None,
+        model: str | None = None,
+        post=None,
+    ) -> None:
+        key = settings.api_key if api_key is None else api_key
+        if not key:
             raise RuntimeError("使用 openai 回答需要设置 OPENAI_API_KEY")
-        self._url = settings.base_url.rstrip("/") + "/chat/completions"
-        self._key = settings.api_key
-        self._model = settings.chat_model
+        root = (base_url or settings.base_url).rstrip("/")
+        self.name = name
+        self._url = root + "/chat/completions"
+        self._key = key
+        self._model = model or settings.chat_model
+        self._post = post or post_json
 
-    def generate(self, question: str, contexts: list[Retrieved]) -> dict:
+    def generate(self, question: str, contexts: list[Retrieved], history: list[dict] | None = None) -> dict:
         context_text = "\n\n".join(f"[{c.chunk_id}] {c.parent_text}" for c in contexts)
+        messages: list[dict] = [{"role": "system", "content": SYSTEM_PROMPT}]
+        for item in history or []:
+            messages.append({"role": item["role"], "content": item["content"]})
+        messages.append({"role": "user", "content": f"资料片段：\n{context_text}\n\n问题：{question}"})
         payload = {
             "model": self._model,
             "temperature": 0,
@@ -65,20 +82,25 @@ class CloudAnswerGenerator:
             # 让本地模型在空闲后仍留在内存里，避免每次提问都重新加载并超时
             "keep_alive": "30m",
             "response_format": {"type": "json_object"},
-            "messages": [
-                {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": f"资料片段：\n{context_text}\n\n问题：{question}"},
-            ],
+            "messages": messages,
         }
-        # 只请求一次。超时后立刻重试会在 Ollama 里叠加上一次还没结束的生成，导致连续超时。
-        body = post_json(self._url, self._key, payload, timeout=180, max_attempts=1)
+        # 每个模型只请求一次。超时后立刻重试会在本地模型里叠加上一次还没结束的生成。
+        body = self._post(self._url, self._key, payload, timeout=180, max_attempts=1)
         return _coerce(body["choices"][0]["message"]["content"])
 
 
 def build_generator(settings: Settings) -> AnswerGenerator:
-    if settings.answerer == "openai":
-        return CloudAnswerGenerator(settings)
-    return OfflineExtractive()
+    from kb.failover import FailoverGenerator, build_chat_models
+
+    models = build_chat_models(settings)
+    if not models:
+        return OfflineExtractive()
+    return FailoverGenerator(
+        models,
+        OfflineExtractive(),
+        threshold=settings.failover_threshold,
+        cooldown=settings.failover_cooldown_s,
+    )
 
 
 def _lead_sentence(text: str) -> str:

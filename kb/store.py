@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 import sqlite3
 import time
+import uuid
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -116,6 +117,22 @@ class Store:
                 citations  TEXT DEFAULT '[]',
                 created_at REAL NOT NULL
             );
+
+            CREATE TABLE IF NOT EXISTS sessions (
+                session_id TEXT PRIMARY KEY,
+                user_id    TEXT NOT NULL,
+                created_at REAL NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
+
+            CREATE TABLE IF NOT EXISTS turns (
+                id         INTEGER PRIMARY KEY AUTOINCREMENT,
+                session_id TEXT NOT NULL,
+                role       TEXT NOT NULL,
+                content    TEXT NOT NULL,
+                created_at REAL NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_turns_session ON turns(session_id);
             """
         )
         self._db.commit()
@@ -317,6 +334,59 @@ class Store:
     def list_jobs(self) -> list[Job]:
         rows = self._db.execute("SELECT * FROM jobs ORDER BY id").fetchall()
         return [_row_to_job(r) for r in rows]
+
+    # ---- 会话 ----
+
+    def create_session(self, user_id: str) -> str:
+        session_id = uuid.uuid4().hex
+        self._db.execute(
+            "INSERT INTO sessions(session_id, user_id, created_at) VALUES(?,?,?)",
+            (session_id, user_id, time.time()),
+        )
+        self._db.commit()
+        return session_id
+
+    def get_session_owner(self, session_id: str) -> str | None:
+        row = self._db.execute(
+            "SELECT user_id FROM sessions WHERE session_id=?", (session_id,)
+        ).fetchone()
+        return row["user_id"] if row else None
+
+    def list_session_ids(self, user_id: str) -> list[str]:
+        rows = self._db.execute(
+            "SELECT session_id FROM sessions WHERE user_id=? ORDER BY created_at, session_id",
+            (user_id,),
+        ).fetchall()
+        return [row["session_id"] for row in rows]
+
+    def count_sessions(self) -> int:
+        return int(self._db.execute("SELECT COUNT(*) FROM sessions").fetchone()[0])
+
+    def add_turn(self, session_id: str, role: str, content: str) -> None:
+        self._db.execute(
+            "INSERT INTO turns(session_id, role, content, created_at) VALUES(?,?,?,?)",
+            (session_id, role, content, time.time()),
+        )
+        self._db.commit()
+
+    def turns(self, session_id: str) -> list[dict]:
+        rows = self._db.execute(
+            "SELECT role, content FROM turns WHERE session_id=? ORDER BY id",
+            (session_id,),
+        ).fetchall()
+        return [{"role": row["role"], "content": row["content"]} for row in rows]
+
+    def recent_turns(self, session_id: str, limit: int) -> list[dict]:
+        rows = self._db.execute(
+            "SELECT role, content FROM turns WHERE session_id=? ORDER BY id DESC LIMIT ?",
+            (session_id, limit),
+        ).fetchall()
+        return [{"role": row["role"], "content": row["content"]} for row in reversed(rows)]
+
+    def count_turns(self, session_id: str) -> int:
+        return int(self._db.execute(
+            "SELECT COUNT(*) FROM turns WHERE session_id=?", (session_id,)
+        ).fetchone()[0])
 
     # ---- 反馈 ----
 

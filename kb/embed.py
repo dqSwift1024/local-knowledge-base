@@ -39,6 +39,30 @@ class HashingEmbedder:
         return _l2_normalize(vectors)
 
 
+class EndpointEmbedder:
+    """一个 OpenAI 兼容嵌入端点。本地和云端只是地址不同。"""
+
+    def __init__(self, name: str, base_url: str, api_key: str, model: str, dim: int, post=None) -> None:
+        from kb.http import post_json
+
+        self.name = name
+        self.dim = dim
+        self._url = base_url.rstrip("/") + "/embeddings"
+        self._key = api_key
+        self._model = model
+        self._post = post or post_json
+
+    def embed(self, texts: list[str]) -> np.ndarray:
+        payload = self._post(
+            self._url, self._key,
+            {"model": self._model, "input": texts, "keep_alive": "30m"},
+        )
+        vectors = np.array([item["embedding"] for item in payload["data"]], dtype=np.float32)
+        if vectors.shape[1] != self.dim:
+            self.dim = int(vectors.shape[1])
+        return _l2_normalize(vectors)
+
+
 class OpenAICompatEmbedder:
     """调用 /embeddings 的兼容接口。密钥只从环境变量读。"""
 
@@ -84,6 +108,11 @@ class LocalBgeEmbedder:
 
 
 def build_embedder(settings: Settings) -> Embedder:
+    from kb.failover import build_embed_chain
+
+    chained = build_embed_chain(settings)
+    if chained is not None:
+        return chained
     if settings.embedder == "openai":
         return OpenAICompatEmbedder(settings)
     if settings.embedder == "bge":

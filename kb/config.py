@@ -47,6 +47,14 @@ class Settings:
     # 回答模型：offline（离线抽取式）或 openai（兼容接口）
     answerer: str = field(default_factory=_env_str("KB_ANSWERER", "offline"))
     chat_model: str = field(default_factory=_env_str("KB_CHAT_MODEL", "gpt-4o-mini"))
+    # 回答容灾链，逗号分隔。每一项再用 KB_CHAT_<NAME>_BASE_URL / _API_KEY / _MODEL。
+    # 本地 Ollama 与云端都用同一套对话补全请求。空则沿用上面的单个模型。
+    chat_chain: str = field(default_factory=_env_str("KB_CHAT_CHAIN", ""))
+    # 嵌入容灾链。备用只有维度与 KB_EMBED_DIM 一致才会被调用。
+    embed_chain: str = field(default_factory=_env_str("KB_EMBED_CHAIN", ""))
+    history_messages: int = field(default_factory=_env_int("KB_HISTORY_MESSAGES", "6"))
+    failover_threshold: int = field(default_factory=_env_int("KB_FAILOVER_THRESHOLD", "2"))
+    failover_cooldown_s: float = field(default_factory=_env_float("KB_FAILOVER_COOLDOWN_S", "60"))
 
     # 云端接口（embedder/answerer 为 openai 时使用）
     base_url: str = field(default_factory=_env_str("OPENAI_BASE_URL", "https://api.openai.com/v1"))

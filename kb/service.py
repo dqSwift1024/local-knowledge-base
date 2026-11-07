@@ -21,6 +21,10 @@ from kb.retrieve import Retriever
 from kb.storage import build_store
 
 
+class SessionError(Exception):
+    """会话不存在、不属于该用户，或用户标识不合法。"""
+
+
 class KnowledgeBase:
     def __init__(self, settings: Settings) -> None:
         self.settings = settings
@@ -58,8 +62,45 @@ class KnowledgeBase:
 
     # ---- 问答与反馈 ----
 
-    def ask(self, question: str) -> Answer:
-        return self.qa.ask(question)
+    def ask(self, question: str, user_id: str | None = None, session_id: str | None = None) -> Answer:
+        if user_id is None and session_id is None:
+            return self.qa.ask(question)
+        if not user_id or not session_id:
+            raise SessionError("缺少用户或会话")
+        user_id = self._check_user(user_id)
+        owner = self.store.get_session_owner(session_id)
+        if owner is None or owner != user_id:
+            raise SessionError("会话不存在")
+        history = self.store.recent_turns(session_id, self.settings.history_messages)
+        answer = self.qa.ask(question, history)
+        answer.session_id = session_id
+        self.store.add_turn(session_id, "user", question)
+        self.store.add_turn(session_id, "assistant", answer.text)
+        return answer
+
+    def open_session(self, user_id: str) -> str:
+        return self.store.create_session(self._check_user(user_id))
+
+    def list_sessions(self, user_id: str) -> list[str]:
+        return self.store.list_session_ids(self._check_user(user_id))
+
+    def get_session(self, user_id: str, session_id: str) -> dict | None:
+        user_id = self._check_user(user_id)
+        owner = self.store.get_session_owner(session_id)
+        if owner is None or owner != user_id:
+            return None
+        return {
+            "session_id": session_id,
+            "user_id": user_id,
+            "turns": self.store.turns(session_id),
+        }
+
+    @staticmethod
+    def _check_user(user_id: str) -> str:
+        user_id = user_id.strip()
+        if not user_id or len(user_id) > 64:
+            raise SessionError("用户标识不合法")
+        return user_id
 
     def record_feedback(self, answer: Answer, useful: bool) -> None:
         self.store.add_feedback(answer.question, useful, answer.refused,

@@ -153,7 +153,7 @@ def _dispatch(kb: KnowledgeBase, args: argparse.Namespace) -> int:
     if args.command == "serve":
         import uvicorn
 
-        from kb.web import create_app
+        from kb.api.app import create_app
 
         print(f"Web 界面：http://{args.host}:{args.port}")
         uvicorn.run(create_app(kb.settings), host=args.host, port=args.port)

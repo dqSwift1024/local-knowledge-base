@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>知屿 · 本地知识库</title>
+<link rel="stylesheet" href="/static/styles.css"></head><body>
+<main class="shell">
+ <header class="topbar">
+  <div class="brand">
+   <div class="brand-mark">知</div>
+   <div class="brand-copy"><h1>知屿</h1><p>本地知识库工作台</p></div>
+  </div>
+  <div class="live"><i id="live-dot" class="live-dot"></i><span id="live-text">正在连接服务</span></div>
+ </header>
+
+ <section class="metrics" aria-label="知识库概览">
+  <div class="metric"><div class="metric-label">运行状态</div><div class="metric-value" id="m-state">连接中</div><div class="metric-detail" id="m-sync">等待首次同步</div></div>
+  <div class="metric"><div class="metric-label">知识文档</div><div class="metric-value" id="m-docs">—</div><div class="metric-detail">当前生效版本</div></div>
+  <div class="metric"><div class="metric-label">检索分块</div><div class="metric-value" id="m-chunks">—</div><div class="metric-detail" id="m-embed">读取模型中</div></div>
+  <div class="metric"><div class="metric-label">待处理任务</div><div class="metric-value" id="m-jobs">—</div><div class="metric-detail" id="m-answer">读取回答模式中</div></div>
+ </section>
+
+ <div class="layout">
+  <div class="stack">
+   <section class="card" aria-labelledby="ask-title">
+    <div class="card-head">
+     <div><h2 class="card-title" id="ask-title">向知识库提问</h2><p class="card-subtitle">答案仅依据已索引文档，并附带可核验来源</p></div>
+     <span class="badge neutral" id="ask-mode">本地检索</span>
+    </div>
+    <div class="card-body">
+     <div class="composer">
+      <label style="flex:1"><span style="position:absolute;width:1px;height:1px;overflow:hidden">问题</span>
+       <textarea id="q" placeholder="例如：这份文档的核心结论是什么？"></textarea>
+      </label>
+      <button class="btn btn-primary" id="askbtn" onclick="ask()">开始检索</button>
+     </div>
+     <div class="shortcut"><span>Enter 换行，⌘/Ctrl + Enter 提交</span><span id="question-count">0 字</span></div>
+     <div class="trace" id="atrace" hidden></div>
+     <div class="answer" id="answer" hidden>
+      <div class="answer-meta"><span class="badge ok" id="answer-status">已完成</span><span class="card-subtitle" id="confidence"></span></div>
+      <div class="answer-text" id="aout"></div>
+      <div class="sources" id="cites"></div>
+     </div>
+    </div>
+   </section>
+
+   <section class="card data-card" aria-labelledby="library-title">
+    <div class="card-head"><div><h2 class="card-title" id="library-title">知识库内容</h2><p class="card-subtitle">查看文档索引状态与最近任务</p></div></div>
+    <div class="tabs" role="tablist">
+     <button class="tab active" id="tab-docs" onclick="showPanel('docs')" role="tab">文档</button>
+     <button class="tab" id="tab-jobs" onclick="showPanel('jobs')" role="tab">任务记录</button>
+    </div>
+    <div class="panel table-wrap" id="panel-docs">
+     <table><thead><tr><th>文档名称</th><th>阶段</th><th>状态</th><th>分块</th><th class="action-col">操作</th></tr></thead><tbody id="docs"></tbody></table>
+    </div>
+    <div class="panel table-wrap" id="panel-jobs" hidden>
+     <table><thead><tr><th>任务</th><th>状态</th><th>说明</th></tr></thead><tbody id="jobs"></tbody></table>
+    </div>
+   </section>
+  </div>
+
+  <aside class="stack">
+   <section class="card" aria-labelledby="upload-title">
+    <div class="card-head"><div><h2 class="card-title" id="upload-title">导入资料</h2><p class="card-subtitle">上传后自动解析、切分并建立索引</p></div></div>
+    <div class="card-body">
+     <label class="dropzone" id="dropzone" for="f">
+      <span>
+       <span class="upload-icon" aria-hidden="true">
+        <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 16V4m0 0L7.5 8.5M12 4l4.5 4.5"/><path d="M5 14v4a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-4"/></svg>
+       </span>
+       <span class="drop-title">拖入文件，或点击选择</span>
+       <span class="drop-help">支持项目已配置的文档格式</span>
+      </span>
+     </label>
+     <input type="file" id="f" onchange="selectFile(this.files[0])">
+     <div class="file-row" id="file-row" hidden><span class="file-name" id="file-name"></span><span class="file-size" id="file-size"></span></div>
+     <div class="upload-actions"><button class="btn btn-primary" id="upbtn" onclick="up()" disabled>上传并索引</button></div>
+     <div class="notice" id="uout" hidden></div>
+    </div>
+   </section>
+
+   <section class="card" aria-labelledby="process-title">
+    <div class="card-head">
+     <div><h2 class="card-title" id="process-title">执行过程</h2><p class="card-subtitle">页面会自动同步后台任务</p></div>
+     <span class="badge neutral" id="process-badge">空闲</span>
+    </div>
+    <div class="card-body">
+     <div class="pipeline" id="steps"></div>
+     <p class="task-summary" id="taskline">当前没有进行中的任务</p>
+    </div>
+   </section>
+  </aside>
+ </div>
+</main>
+<script src="/static/app.js"></script>
+</body></html>

@@ -31,6 +31,9 @@ class Answer:
     nearest: list[Citation] = field(default_factory=list)
     confidence: float = 0.0
     trace: list[dict] = field(default_factory=list)
+    session_id: str = ""
+    model: str = ""
+    degraded: bool = False
 
 
 class QAService:
@@ -39,7 +42,7 @@ class QAService:
         self._generator = generator
         self._settings = settings
 
-    def ask(self, question: str) -> Answer:
+    def ask(self, question: str, history: list[dict] | None = None) -> Answer:
         trace: list[dict] = []
         started = time.perf_counter()
         candidates = self._retriever.search(question)
@@ -66,10 +69,12 @@ class QAService:
             )
 
         generated = time.perf_counter()
-        result = self._generator.generate(question, candidates)
+        result = self._generator.generate(question, candidates, history)
         allowed = {c.chunk_id: c for c in candidates}
         valid_ids = [cid for cid in result.get("citations", []) if cid in allowed]
         rejected = bool(result.get("refused") or not valid_ids)
+        model = str(result.get("model") or "offline-extractive")
+        degraded = bool(result.get("degraded", False))
         trace.append({
             "step": "组织回答",
             "status": "refused" if rejected else "done",
@@ -81,6 +86,7 @@ class QAService:
                 question=question, text=REFUSAL, refused=True,
                 nearest=[_to_citation(c) for c in candidates[:3]],
                 confidence=confidence, trace=trace,
+                model=model, degraded=degraded,
             )
 
         return Answer(
@@ -89,6 +95,7 @@ class QAService:
             refused=False,
             citations=[_to_citation(allowed[cid]) for cid in valid_ids],
             confidence=confidence, trace=trace,
+            model=model, degraded=degraded,
         )
 
 
